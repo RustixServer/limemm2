@@ -1328,12 +1328,7 @@ task.spawn(function()
                 local cam = workspace.CurrentCamera
                 if c and hrp and m and m.Character and cam then
                     local eq = c:FindFirstChild("Gun") or c:FindFirstChild("Revolver")
-                    if not eq then
-                        local g = getgun()
-                        if g and g.Parent ~= c then
-                            pcall(function() h:EquipTool(g) end)
-                        end
-                    else
+                    if eq then
                         local ml = uis:GetMouseLocation()
                         local ray = cam:ScreenPointToRay(ml.X, ml.Y)
                         local params = RaycastParams.new()
