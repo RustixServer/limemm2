@@ -67,6 +67,13 @@ if s.spin == nil then s.spin = false end
 if s.spinspeed == nil then s.spinspeed = 30 end
 if s.wallbang == nil then s.wallbang = false end
 if s.triggerbot == nil then s.triggerbot = false end
+if s.hitbox == nil then s.hitbox = false end
+if s.hitboxsize == nil then s.hitboxsize = 8 end
+if s.aura_rings == nil then s.aura_rings = false end
+if s.aura_chains == nil then s.aura_chains = false end
+if s.aura_spiral == nil then s.aura_spiral = false end
+if s.aura_orbit == nil then s.aura_orbit = false end
+if s.aura_pulse == nil then s.aura_pulse = false end
 if s.anticoin == nil then s.anticoin = false end
 if s.antifling == nil then s.antifling = false end
 if s.lang == nil then s.lang = "ru" end
@@ -785,51 +792,56 @@ _G.lime_tracer = function(from, to)
     end)
 end
 
--- ===== china hat под цвет акцента =====
-local chinaparts = {}
-local function updatechinahat()
-    if not s.chinahat then
-        pcall(function() for _,p in pairs(chinaparts) do p:Destroy() end end)
-        chinaparts = {}
-        return
-    end
-    local c = localplayer.Character
-    local _,h = alive()
-    if not c or not h then return end
-    local head = c:FindFirstChild("Head")
-    if not head then return end
-    if #chinaparts == 0 then
-        pcall(function()
-            local flat = CFrame.Angles(0, 0, math.rad(90))
-            local brim = Instance.new("Part")
-            brim.Name = "lime_hat" brim.Shape = Enum.PartType.Cylinder
-            brim.Size = Vector3.new(0.12, 2.4, 2.4)
-            brim.Material = Enum.Material.SmoothPlastic brim.Color = getaccent()
-            brim.CanCollide = false brim.CanQuery = false brim.CanTouch = false brim.Massless = true
-            brim.CFrame = head.CFrame * CFrame.new(0, 1.05, 0) * flat
-            brim.Parent = c
-            local w1 = Instance.new("WeldConstraint") w1.Part0 = head w1.Part1 = brim w1.Parent = brim
-            local top = Instance.new("Part")
-            top.Name = "lime_hat" top.Shape = Enum.PartType.Cylinder
-            top.Size = Vector3.new(0.4, 0.9, 0.9)
-            top.Material = Enum.Material.SmoothPlastic top.Color = getaccent()
-            top.CanCollide = false top.CanQuery = false top.CanTouch = false top.Massless = true
-            top.CFrame = head.CFrame * CFrame.new(0, 1.35, 0) * flat
-            top.Parent = c
-            local w2 = Instance.new("WeldConstraint") w2.Part0 = head w2.Part1 = top w2.Parent = top
-            chinaparts = {brim, top}
-        end)
-    else
-        pcall(function() for _,p in pairs(chinaparts) do p.Color = getaccent() end end)
-    end
+-- ===== halo круг над головой под цвет акцента =====
+local halodisc, halodots = nil, {}
+local function haloclear()
+    pcall(function() if halodisc then halodisc:Destroy() end end) halodisc = nil
+    pcall(function() for _,d in pairs(halodots) do d:Destroy() end end) halodots = {}
 end
+local function updatechinahat() haloclear() end
 task.spawn(function()
     while getgenv().lime_loaded do
-        if s.chinahat or #chinaparts > 0 then updatechinahat() end
-        task.wait(0.5)
+        if s.chinahat then
+            local c,h,hrp = alive()
+            local head = c and c:FindFirstChild("Head")
+            if head then
+                if not halodisc or not halodisc.Parent then
+                    halodisc = Instance.new("Part")
+                    halodisc.Name = "lime_halo" halodisc.Shape = Enum.PartType.Cylinder
+                    halodisc.Size = Vector3.new(0.1, 2.2, 2.2)
+                    halodisc.Material = Enum.Material.Neon halodisc.Color = getaccent()
+                    halodisc.Anchored = true halodisc.CanCollide = false halodisc.CanQuery = false halodisc.CanTouch = false
+                    halodisc.Parent = workspace
+                end
+                halodisc.Color = getaccent()
+                local t = tick()
+                halodisc.CFrame = CFrame.new(head.Position + Vector3.new(0, 1.3 + math.sin(t * 2) * 0.08, 0)) * CFrame.Angles(0, 0, math.rad(90))
+                for i=1,6 do
+                    local d = halodots[i]
+                    if not d or not d.Parent then
+                        d = Instance.new("Part")
+                        d.Name = "lime_halo" d.Shape = Enum.PartType.Ball
+                        d.Size = Vector3.new(0.35, 0.35, 0.35)
+                        d.Material = Enum.Material.Neon d.Color = getaccent()
+                        d.Anchored = true d.CanCollide = false d.CanQuery = false d.CanTouch = false
+                        d.Parent = workspace
+                        halodots[i] = d
+                    end
+                    d.Color = getaccent()
+                    local a = t * 2.5 + (i - 1) * math.pi / 3
+                    d.CFrame = CFrame.new(head.Position + Vector3.new(math.cos(a) * 1.5, 0.9, math.sin(a) * 1.5))
+                end
+            else
+                haloclear()
+            end
+            runservice.Heartbeat:Wait()
+        else
+            if halodisc or #halodots > 0 then haloclear() end
+            task.wait(0.5)
+        end
     end
 end)
-localplayer.CharacterAdded:Connect(function() chinaparts = {} end)
+localplayer.CharacterAdded:Connect(function() haloclear() end)
 
 -- ===== jump circle =====
 local function hookjumpcircle(char)
@@ -1316,7 +1328,12 @@ task.spawn(function()
                 local cam = workspace.CurrentCamera
                 if c and hrp and m and m.Character and cam then
                     local eq = c:FindFirstChild("Gun") or c:FindFirstChild("Revolver")
-                    if eq and tick() - trigcd > 0.25 then
+                    if not eq then
+                        local g = getgun()
+                        if g and g.Parent ~= c then
+                            pcall(function() h:EquipTool(g) end)
+                        end
+                    else
                         local ml = uis:GetMouseLocation()
                         local ray = cam:ScreenPointToRay(ml.X, ml.Y)
                         local params = RaycastParams.new()
@@ -1336,6 +1353,108 @@ task.spawn(function()
         else task.wait(0.4) end
     end
 end)
+
+-- ===== ауры вокруг тела под цвет акцента =====
+local auraparts = {}
+local function auraclear()
+    pcall(function() for _,p in pairs(auraparts) do p:Destroy() end end)
+    auraparts = {}
+end
+local function auradot(i, shape, size)
+    local d = auraparts[i]
+    if not d or not d.Parent then
+        d = Instance.new("Part")
+        d.Name = "lime_aura" d.Shape = shape
+        d.Size = size
+        d.Material = Enum.Material.Neon d.Color = getaccent()
+        d.Anchored = true d.CanCollide = false d.CanQuery = false d.CanTouch = false
+        d.Parent = workspace
+        auraparts[i] = d
+    end
+    d.Color = getaccent()
+    return d
+end
+task.spawn(function()
+    local pulsering = nil
+    while getgenv().lime_loaded do
+        if s.aura_rings or s.aura_chains or s.aura_spiral or s.aura_orbit or s.aura_pulse then
+            local c,h,hrp = alive()
+            if hrp then
+                local t = tick()
+                local idx = 0
+                if s.aura_rings then
+                    for i=1,12 do
+                        idx = idx + 1
+                        local d = auradot(idx, Enum.PartType.Ball, Vector3.new(0.4,0.4,0.4))
+                        local a = t * 3 + (i - 1) * math.pi / 6
+                        d.CFrame = CFrame.new(hrp.Position + Vector3.new(math.cos(a) * 3, 1 + math.sin(t * 2 + i) * 0.3, math.sin(a) * 3))
+                    end
+                    for i=1,10 do
+                        idx = idx + 1
+                        local d = auradot(idx, Enum.PartType.Ball, Vector3.new(0.3,0.3,0.3))
+                        local a = -t * 2 + (i - 1) * math.pi / 5
+                        d.CFrame = CFrame.new(hrp.Position + Vector3.new(math.cos(a) * 2.2, 0.2 + (i % 3) * 0.9, 0)) * CFrame.Angles(0, 0, math.rad(35))
+                        d.Position = hrp.Position + Vector3.new(math.cos(a) * 2.2, 0.2 + (i % 3) * 0.9, math.sin(a) * 2.2)
+                    end
+                end
+                if s.aura_chains then
+                    for i=1,8 do
+                        idx = idx + 1
+                        local d = auradot(idx, Enum.PartType.Block, Vector3.new(0.35,0.35,0.35))
+                        local a = t * 1.5 + (i - 1) * math.pi / 4
+                        d.CFrame = CFrame.new(hrp.Position + Vector3.new(math.cos(a) * 2, 1 + math.sin(t * 4 + i * 1.3) * 0.9, math.sin(a) * 2)) * CFrame.Angles(a, t, 0)
+                    end
+                end
+                if s.aura_spiral then
+                    for i=1,16 do
+                        idx = idx + 1
+                        local d = auradot(idx, Enum.PartType.Ball, Vector3.new(0.3,0.3,0.3))
+                        local a = t * 4 + i * 0.5
+                        d.CFrame = CFrame.new(hrp.Position + Vector3.new(math.cos(a) * 1.8, (i / 16) * 5, math.sin(a) * 1.8))
+                    end
+                end
+                if s.aura_orbit then
+                    for i=1,4 do
+                        idx = idx + 1
+                        local d = auradot(idx, Enum.PartType.Ball, Vector3.new(0.8,0.8,0.8))
+                        local a = t * 1.2 + (i - 1) * math.pi / 2
+                        d.CFrame = CFrame.new(hrp.Position + Vector3.new(math.cos(a) * 5, 1.5 + math.sin(t + i) * 0.5, math.sin(a) * 5))
+                    end
+                end
+                if s.aura_pulse then
+                    if not pulsering or not pulsering.Parent then
+                        pulsering = Instance.new("Part")
+                        pulsering.Name = "lime_aura" pulsering.Shape = Enum.PartType.Cylinder
+                        pulsering.Material = Enum.Material.Neon pulsering.Color = getaccent()
+                        pulsering.Anchored = true pulsering.CanCollide = false pulsering.CanQuery = false pulsering.CanTouch = false
+                        pulsering.Parent = workspace
+                    end
+                    pulsering.Color = getaccent()
+                    local rr = (t * 3) % 5 + 0.5
+                    pulsering.Size = Vector3.new(0.2, rr * 2, rr * 2)
+                    pulsering.Transparency = rr / 5.5
+                    pulsering.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.8, 0)) * CFrame.Angles(0, 0, math.rad(90))
+                elseif pulsering then
+                    pcall(function() pulsering:Destroy() end)
+                    pulsering = nil
+                end
+                -- лишние точки убрать
+                for i=idx+1,#auraparts do
+                    pcall(function() auraparts[i]:Destroy() end)
+                    auraparts[i] = nil
+                end
+            else
+                auraclear()
+            end
+            runservice.Heartbeat:Wait()
+        else
+            if #auraparts > 0 then auraclear() end
+            if pulsering then pcall(function() pulsering:Destroy() end) pulsering = nil end
+            task.wait(0.5)
+        end
+    end
+end)
+localplayer.CharacterAdded:Connect(function() auraclear() end)
 
 -- ===== бинды =====
 local listening_shoot, listening_menu = false, false
@@ -1551,6 +1670,47 @@ task.spawn(function()
     if getgenv().lime_loaded then feedmsg("lime.cs загружен","lime.cs loaded", getaccent()) end
 end)
 
+-- карточка мардер/шериф с аватарами над вотермаркой
+local thumbcache = {}
+local function getthumb(plr)
+    if not plr then return "" end
+    if thumbcache[plr.UserId] then return thumbcache[plr.UserId] end
+    local ok, content = pcall(function()
+        return players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100, false)
+    end)
+    if ok and content and content ~= "" then thumbcache[plr.UserId] = content return content end
+    return ""
+end
+-- свой профиль внутри гуи: аватарка + ник
+local pwin = Instance.new("Frame") pwin.Size = UDim2.new(0,210,0,86) pwin.Position = UDim2.new(0,12,1,-150)
+pwin.BackgroundColor3 = curtheme().bg2 pwin.BorderSizePixel = 0 pwin.Active = true pwin.Parent = gui
+corner(pwin, 6)
+local pwst = Instance.new("UIStroke", pwin) pwst.Thickness = 1 pwst.Transparency = 0.4 pwst.Color = getaccent()
+local pimg = Instance.new("ImageLabel") pimg.Size = UDim2.new(0,70,0,70) pimg.Position = UDim2.new(0,8,0,8)
+pimg.BackgroundColor3 = curtheme().bg3 pimg.Image = getthumb(localplayer) pimg.Parent = pwin
+local prow = Instance.new("UICorner") prow.CornerRadius = UDim.new(1,0) prow.Parent = pimg
+local pname = Instance.new("TextLabel") pname.Size = UDim2.new(1,-92,0,26) pname.Position = UDim2.new(0,86,0,8)
+pname.BackgroundTransparency = 1 pname.Font = Enum.Font.GothamBold pname.TextSize = 15 pname.TextXAlignment = Enum.TextXAlignment.Left
+pname.TextColor3 = curtheme().txt pname.TextTruncate = Enum.TextTruncate.AtEnd pname.Text = string.lower(localplayer.DisplayName) pname.Parent = pwin
+local psub = Instance.new("TextLabel") psub.Size = UDim2.new(1,-92,0,20) psub.Position = UDim2.new(0,86,0,36)
+psub.BackgroundTransparency = 1 psub.Font = Enum.Font.Code psub.TextSize = 12 psub.TextXAlignment = Enum.TextXAlignment.Left
+psub.TextColor3 = curtheme().dim psub.TextTruncate = Enum.TextTruncate.AtEnd psub.Text = "@"..string.lower(localplayer.Name) psub.Parent = pwin
+local pid = Instance.new("TextLabel") pid.Size = UDim2.new(1,-92,0,18) pid.Position = UDim2.new(0,86,0,58)
+pid.BackgroundTransparency = 1 pid.Font = Enum.Font.Code pid.TextSize = 11 pid.TextXAlignment = Enum.TextXAlignment.Left
+pid.TextColor3 = curtheme().dim pid.Text = "id: "..localplayer.UserId pid.Parent = pwin
+drag(pwin, pwin)
+task.spawn(function()
+    while getgenv().lime_loaded and pwin.Parent do
+        pwin.BackgroundColor3 = curtheme().bg2
+        pwst.Color = getaccent()
+        pname.TextColor3 = curtheme().txt
+        psub.TextColor3 = curtheme().dim
+        pid.TextColor3 = curtheme().dim
+        if pimg.Image == "" then pimg.Image = getthumb(localplayer) end
+        task.wait(3)
+    end
+end)
+
 local side = mk("bg2", "Frame", {Size = UDim2.new(0,140,1,-45), Position = UDim2.new(0,0,0,45), BorderSizePixel = 0}, main)
 local pages, tabs = {}, {}
 local function selecttab(name)
@@ -1587,9 +1747,10 @@ local pkill = maketab("kill",4)
 local pfling = maketab("fling",5)
 local pmisc = maketab("misc",6)
 local ptp = maketab("teleport",7)
-local pquick = maketab(txt("кнопки","buttons"),8)
-local pcfg = maketab("cfg",9)
-local pset = maketab("settings",10)
+local paura = maketab("aura",8)
+local pquick = maketab(txt("кнопки","buttons"),9)
+local pcfg = maketab("cfg",10)
+local pset = maketab("settings",11)
 
 local function seclabel(par,y,text)
     local l = Instance.new("TextLabel") l.Size = UDim2.new(1,-10,0,24) l.Position = UDim2.new(0,0,0,y)
@@ -1664,7 +1825,7 @@ checkbox(visscroll,110,txt("показ innocent","show innocent"),s.showinnocent
 checkbox(visscroll,138,"fullbright",s.fullbright,function(v) setfullbright(v) end)
 seclabel(visscroll,166,txt("player visuals","player visuals"))
 checkbox(visscroll,192,"bullet tracer",s.tracer,function(v) s.tracer=v setstatus("tracer "..(v and txt("вкл","on") or txt("выкл","off"))) end)
-checkbox(visscroll,220,"china hat",s.chinahat,function(v) s.chinahat=v if not v then updatechinahat() end end)
+checkbox(visscroll,220,"halo",s.chinahat,function(v) s.chinahat=v if not v then updatechinahat() end end)
 checkbox(visscroll,248,"jump circle",s.jumpcircle,function(v) s.jumpcircle=v end)
 checkbox(visscroll,276,"trail",s.trail,function(v) s.trail=v if not v then updatetrail() end end)
 seclabel(visscroll,304,txt("время суток","day time"))
@@ -1726,6 +1887,11 @@ local wbinfo = Instance.new("TextLabel") wbinfo.Size = UDim2.new(1,-10,0,40) wbi
 wbinfo.BackgroundTransparency = 1 wbinfo.Font = Enum.Font.Code wbinfo.TextSize = 11 wbinfo.TextXAlignment = Enum.TextXAlignment.Left
 wbinfo.TextColor3 = curtheme().dim wbinfo.TextWrapped = true wbinfo.Text = txt("обычный клик бьет в мардера через стены","normal click hits murderer through walls") wbinfo.Parent = pshoot wbinfo:SetAttribute("kind","dim")
 checkbox(pshoot,258,"triggerbot",s.triggerbot,function(v) s.triggerbot=v setstatus("triggerbot "..(v and txt("вкл","on") or txt("выкл","off"))) end)
+
+-- скролл shoot чтобы все влезло
+local shootscroll = Instance.new("ScrollingFrame") shootscroll.Size = UDim2.new(1,-4,1,0) shootscroll.Position = UDim2.new(0,0,0,0)
+shootscroll.BackgroundTransparency = 1 shootscroll.ScrollBarThickness = 3 shootscroll.CanvasSize = UDim2.new(0,0,0,360) shootscroll.Parent = pshoot
+for _,ch in pairs(pshoot:GetChildren()) do if ch ~= shootscroll then ch.Parent = shootscroll end end
 
 -- kill за мардера
 seclabel(pkill,0,txt("kill за мардера","kill as murderer"))
@@ -1851,6 +2017,17 @@ else
     end
 end
 
+-- aura
+seclabel(paura,0,txt("ауры вокруг тебя","auras around you"))
+checkbox(paura,26,txt("круги","rings"),s.aura_rings,function(v) s.aura_rings=v if not v and not s.aura_chains and not s.aura_spiral and not s.aura_orbit and not s.aura_pulse then auraclear() end end)
+checkbox(paura,54,txt("цепи","chains"),s.aura_chains,function(v) s.aura_chains=v if not v and not s.aura_rings and not s.aura_spiral and not s.aura_orbit and not s.aura_pulse then auraclear() end end)
+checkbox(paura,82,txt("спираль","spiral"),s.aura_spiral,function(v) s.aura_spiral=v end)
+checkbox(paura,110,txt("орбита","orbit"),s.aura_orbit,function(v) s.aura_orbit=v end)
+checkbox(paura,138,txt("пульс","pulse"),s.aura_pulse,function(v) s.aura_pulse=v end)
+local aurahint = Instance.new("TextLabel") aurahint.Size = UDim2.new(1,-10,0,60) aurahint.Position = UDim2.new(0,0,0,168)
+aurahint.BackgroundTransparency = 1 aurahint.Font = Enum.Font.Code aurahint.TextSize = 12 aurahint.TextXAlignment = Enum.TextXAlignment.Left
+aurahint.TextColor3 = curtheme().dim aurahint.TextWrapped = true aurahint.Text = txt("все под цвет из settings","all use settings color") aurahint.Parent = paura aurahint:SetAttribute("kind","dim")
+
 -- settings
 seclabel(pset,0,"theme")
 button(pset,26,txt("черная тема","black theme"),function() s.theme = "black" paint() selecttab("settings") paintbuttons() refreshfling() end)
@@ -1909,6 +2086,11 @@ local quickdefs = {
     {key="anticoin", label="anti coin", get=function() return s.anticoin end, set=function(v) setanticoin(v) end},
     {key="antifling", label="anti fling", get=function() return s.antifling end, set=function(v) s.antifling=v end},
     {key="trigger", label="triggerbot", get=function() return s.triggerbot end, set=function(v) s.triggerbot=v end},
+    {key="rings", label="aura rings", get=function() return s.aura_rings end, set=function(v) s.aura_rings=v end},
+    {key="chains", label="aura chains", get=function() return s.aura_chains end, set=function(v) s.aura_chains=v end},
+    {key="spiral", label="aura spiral", get=function() return s.aura_spiral end, set=function(v) s.aura_spiral=v end},
+    {key="orbit", label="aura orbit", get=function() return s.aura_orbit end, set=function(v) s.aura_orbit=v end},
+    {key="pulse", label="aura pulse", get=function() return s.aura_pulse end, set=function(v) s.aura_pulse=v end},
 }
 local function makequick(def)
     local f = Instance.new("Frame") f.Size = UDim2.new(0,170,0,32) f.Position = UDim2.new(0,20 + (#gui:GetChildren() % 5) * 180,0,60 + math.floor(#gui:GetChildren() / 5) * 40)
@@ -2002,18 +2184,32 @@ drag(shootbtn, shootbtn)
 
 -- загрузка 3 сек на лаймовом фоне
 local loadbg = Instance.new("Frame") loadbg.Size = UDim2.new(1,0,1,0) loadbg.BackgroundColor3 = getaccent() loadbg.BackgroundTransparency = 0.55 loadbg.BorderSizePixel = 0 loadbg.Parent = gui
-local loadt = Instance.new("TextLabel") loadt.Size = UDim2.new(0,300,0,60) loadt.Position = UDim2.new(0.5,-150,0.5,-70)
+local loadt = Instance.new("TextLabel") loadt.Size = UDim2.new(0,300,0,60) loadt.Position = UDim2.new(0.5,-150,0.5,-90)
 loadt.BackgroundTransparency = 1 loadt.Font = Enum.Font.GothamBold loadt.TextSize = 48 loadt.Text = "lime.cs" loadt.TextColor3 = Color3.fromRGB(20,20,20) loadt.Parent = loadbg
-local loadbarbg = Instance.new("Frame") loadbarbg.Size = UDim2.new(0,260,0,8) loadbarbg.Position = UDim2.new(0.5,-130,0.5,10)
+local loadsub = Instance.new("TextLabel") loadsub.Size = UDim2.new(0,300,0,20) loadsub.Position = UDim2.new(0.5,-150,0.5,-28)
+loadsub.BackgroundTransparency = 1 loadsub.Font = Enum.Font.Code loadsub.TextSize = 13 loadsub.Text = "v2 by tylenchik" loadsub.TextColor3 = Color3.fromRGB(40,40,40) loadsub.Parent = loadbg
+local loadbarbg = Instance.new("Frame") loadbarbg.Size = UDim2.new(0,260,0,10) loadbarbg.Position = UDim2.new(0.5,-130,0.5,0)
 loadbarbg.BackgroundColor3 = Color3.fromRGB(20,20,20) loadbarbg.BackgroundTransparency = 0.4 loadbarbg.BorderSizePixel = 0 loadbarbg.Parent = loadbg
 corner(loadbarbg, 4)
 local loadfill = Instance.new("Frame") loadfill.Size = UDim2.new(0,0,1,0) loadfill.BackgroundColor3 = Color3.fromRGB(255,255,255) loadfill.BorderSizePixel = 0 loadfill.Parent = loadbarbg
 corner(loadfill, 4)
+local loadpct = Instance.new("TextLabel") loadpct.Size = UDim2.new(0,260,0,20) loadpct.Position = UDim2.new(0.5,-130,0.5,14)
+loadpct.BackgroundTransparency = 1 loadpct.Font = Enum.Font.GothamBold loadpct.TextSize = 14 loadpct.Text = "0%" loadpct.TextColor3 = Color3.fromRGB(20,20,20) loadpct.Parent = loadbg
+local loadtip = Instance.new("TextLabel") loadtip.Size = UDim2.new(0,400,0,20) loadtip.Position = UDim2.new(0.5,-200,0.5,40)
+loadtip.BackgroundTransparency = 1 loadtip.Font = Enum.Font.Code loadtip.TextSize = 12 loadtip.Text = "" loadtip.TextColor3 = Color3.fromRGB(40,40,40) loadtip.Parent = loadbg
+local loadtips = {"совет: пкм по coin farm открывает настройки", "совет: бинд меню меняется в settings", "совет: fire стреляет в мардера", "совет: cfg сохраняет настройки"}
 task.spawn(function()
     for i=1,30 do
         if not getgenv().lime_loaded then return end
         loadfill.Size = UDim2.new(i/30,0,1,0)
+        loadpct.Text = math.floor(i/30*100).."%"
+        if i % 8 == 1 then loadtip.Text = loadtips[(math.floor(i/8) % #loadtips) + 1] end
         task.wait(0.1)
+    end
+    for f=1,6 do
+        if not loadbg.Parent then break end
+        loadbg.BackgroundTransparency = 0.55 + f * 0.07
+        task.wait(0.05)
     end
     if loadbg.Parent then loadbg:Destroy() end
     main.Visible = true wm.Visible = true shootbtn.Visible = true
