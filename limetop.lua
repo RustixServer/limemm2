@@ -76,6 +76,9 @@ if s.aura_orbit == nil then s.aura_orbit = false end
 if s.aura_pulse == nil then s.aura_pulse = false end
 if s.anticoin == nil then s.anticoin = false end
 if s.antifling == nil then s.antifling = false end
+if s.hitsound == nil then s.hitsound = false end
+if s.hitsoundid == nil then s.hitsoundid = "rbxassetid://160050361" end
+if s.autothrow == nil then s.autothrow = false end
 if s.lang == nil then s.lang = "ru" end
 if s.trail == nil then s.trail = false end
 s.bangtarget = nil
@@ -134,6 +137,11 @@ local LANGMSG = {
     ["anti fling вкл"] = "anti fling on",
     ["anti fling выкл"] = "anti fling off",
     ["triggerbot выстрел"] = "triggerbot shot",
+    ["звук сохранен"] = "sound saved",
+    ["нет целей"] = "no targets",
+    ["нет animate"] = "no animate",
+    ["анимации сброшены"] = "animations reset",
+    ["фейк выкл"] = "fake off",
     ["triggerbot вкл"] = "triggerbot on",
     ["triggerbot выкл"] = "triggerbot off",
 }
@@ -151,6 +159,11 @@ local LANGPRE = {
     ["cfg сохранен: "] = "cfg saved: ",
     ["cfg загружен: "] = "cfg loaded: ",
     ["кнопка добавлена: "] = "button added: ",
+    ["пак: "] = "pack: ",
+    ["кидок в "] = "throw at ",
+    ["фейк headless вкл"] = "fake headless on",
+    ["фейк korblox вкл"] = "fake korblox on",
+    ["фейк notorso вкл"] = "fake no torso on",
     ["готово, убито: "] = "done, killed: ",
     ["цель: "] = "target: ",
     ["скорость: "] = "speed: ",
@@ -1451,6 +1464,128 @@ task.spawn(function()
 end)
 localplayer.CharacterAdded:Connect(function() auraclear() end)
 
+-- ===== аим броска ножа =====
+local function nearestenemy()
+    local c,h,hrp = alive()
+    if not hrp then return nil end
+    local best, bd = nil, 1e9
+    for _,p in pairs(players:GetPlayers()) do
+        if p ~= localplayer and p.Character then
+            local vhrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local vhum = p.Character:FindFirstChildOfClass("Humanoid")
+            if vhrp and vhum and vhum.Health > 0 and getrole(p) ~= "murderer" then
+                local d = (vhrp.Position - hrp.Position).Magnitude
+                if d < bd then bd = d best = p end
+            end
+        end
+    end
+    return best
+end
+local function throwknife()
+    local tgt = nearestenemy()
+    if not tgt then setstatus(txt("нет целей","no targets")) return end
+    local c,h,hrp = alive()
+    if not hrp then setstatus("ты мертв") return end
+    local knife = getknife()
+    if not knife then setstatus("нужен нож, ты не мардер") return end
+    if knife.Parent ~= c then
+        pcall(function() h:EquipTool(knife) end)
+        task.wait(0.2)
+    end
+    local vhrp = tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart")
+    if not vhrp then return end
+    local pred = vhrp.Position + vhrp.Velocity * 0.15
+    pcall(function()
+        hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(pred.X, hrp.Position.Y, pred.Z))
+        local cam = workspace.CurrentCamera
+        if cam then cam.CFrame = CFrame.new(cam.CFrame.Position, pred) end
+        if typeof(mousemoveabs) == "function" and cam then
+            local sp, on = cam:WorldToScreenPoint(pred)
+            if on then mousemoveabs(sp.X, sp.Y) end
+        end
+    end)
+    task.wait(0.1)
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.05)
+        vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    pcall(function()
+        local eq = c:FindFirstChild("Knife")
+        if eq then eq:Activate() end
+    end)
+    setstatus(txt("кидок в ","throw at ")..string.lower(tgt.DisplayName))
+end
+task.spawn(function()
+    while getgenv().lime_loaded do
+        if s.autothrow and not mydead() then
+            if getknife() then pcall(throwknife) end
+            task.wait(2.5)
+        else task.wait(0.5) end
+    end
+end)
+
+-- ===== анимационные паки (zombie oldschool robot superhero) =====
+local animpacks = {
+    zombie = {idle=616158929, walk=616160636, run=616163682, jump=616161997, fall=616157476, climb=616156119},
+    oldschool = {idle=5319828216, walk=531983976, run=5319847200, jump=531984193, fall=531983976, climb=531984972},
+    robot = {idle=616088211, walk=616095330, run=616091570, jump=616090535, fall=616089182, climb=616086039},
+    superhero = {idle=616111295, walk=616122287, run=616117076, jump=616115533, fall=616108001, climb=616104706},
+}
+local animorig = {}
+local function setanim(name)
+    local c = localplayer.Character
+    if not c then setstatus("ты мертв") return end
+    local animate = c:FindFirstChild("Animate")
+    if not animate then setstatus("нет animate") return end
+    if name == "reset" then
+        pcall(function()
+            for key, id in pairs(animorig) do
+                local sl = string.split(key, "/")
+                local f = animate:FindFirstChild(sl[1])
+                local a = f and f:FindFirstChild(sl[2])
+                if a then a.AnimationId = id end
+            end
+        end)
+        s.animpack = nil
+        setstatus("анимации сброшены")
+    else
+        local p = animpacks[name]
+        if not p then return end
+        pcall(function()
+            local function setone(folder, child, id)
+                local f = animate:FindFirstChild(folder)
+                local a = f and f:FindFirstChild(child)
+                if a then
+                    local key = folder.."/"..child
+                    if animorig[key] == nil then animorig[key] = a.AnimationId end
+                    a.AnimationId = "rbxassetid://"..id
+                end
+            end
+            setone("idle","IdleAnim",p.idle)
+            setone("walk","WalkAnim",p.walk)
+            setone("run","RunAnim",p.run)
+            setone("jump","JumpAnim",p.jump)
+            setone("fall","FallAnim",p.fall)
+            setone("climb","ClimbAnim",p.climb)
+        end)
+        s.animpack = name
+        setstatus("пак: "..name)
+    end
+    pcall(function()
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end)
+end
+localplayer.CharacterAdded:Connect(function()
+    task.wait(1.5)
+    if getgenv().lime_loaded and s.animpack then
+        animorig = {}
+        pcall(function() setanim(s.animpack) end)
+    end
+end)
+
 -- ===== бинды =====
 local listening_shoot, listening_menu = false, false
 uis.InputBegan:Connect(function(input,gpe)
@@ -1743,9 +1878,10 @@ local pfling = maketab("fling",5)
 local pmisc = maketab("misc",6)
 local ptp = maketab("teleport",7)
 local paura = maketab("aura",8)
-local pquick = maketab(txt("кнопки","buttons"),9)
-local pcfg = maketab("cfg",10)
-local pset = maketab("settings",11)
+local pfake = maketab("fake",9)
+local pquick = maketab(txt("кнопки","buttons"),10)
+local pcfg = maketab("cfg",11)
+local pset = maketab("settings",12)
 
 local function seclabel(par,y,text)
     local l = Instance.new("TextLabel") l.Size = UDim2.new(1,-10,0,24) l.Position = UDim2.new(0,0,0,y)
@@ -1896,6 +2032,8 @@ local killhint = Instance.new("TextLabel") killhint.Size = UDim2.new(1,-10,0,60)
 killhint.BackgroundTransparency = 1 killhint.Font = Enum.Font.Code killhint.TextSize = 12 killhint.TextXAlignment = Enum.TextXAlignment.Left
 killhint.TextColor3 = curtheme().dim killhint.TextWrapped = true killhint.Text = txt("нужен нож в руках. сначала ремоуты потом телепорт добивка","need knife in hands. remotes first then tp finish") killhint.Parent = pkill killhint:SetAttribute("kind","dim")
 button(pkill,156,txt("стоп kill","stop kill"),function() killing = false setstatus("стоп") end)
+button(pkill,192,txt("кинуть нож в ближайшего","throw knife at nearest"),function() throwknife() end)
+checkbox(pkill,228,txt("авто кидок ножа","knife auto throw"),s.autothrow,function(v) s.autothrow=v end)
 
 -- fling kilasik мульти выбор
 seclabel(pfling,0,txt("fling - выбери цели галочками","fling - tick targets"))
@@ -2023,6 +2161,17 @@ local aurahint = Instance.new("TextLabel") aurahint.Size = UDim2.new(1,-10,0,60)
 aurahint.BackgroundTransparency = 1 aurahint.Font = Enum.Font.Code aurahint.TextSize = 12 aurahint.TextXAlignment = Enum.TextXAlignment.Left
 aurahint.TextColor3 = curtheme().dim aurahint.TextWrapped = true aurahint.Text = txt("все под цвет из settings","all use settings color") aurahint.Parent = paura aurahint:SetAttribute("kind","dim")
 
+-- fake bundles анимации
+seclabel(pfake,0,txt("паки анимаций","animation packs"))
+button(pfake,26,"zombie",function() setanim("zombie") paintbuttons() end)
+button(pfake,62,"oldschool",function() setanim("oldschool") paintbuttons() end)
+button(pfake,98,"robot",function() setanim("robot") paintbuttons() end)
+button(pfake,134,"superhero",function() setanim("superhero") paintbuttons() end)
+button(pfake,170,txt("сбросить","reset"),function() setanim("reset") paintbuttons() end)
+local fakehint = Instance.new("TextLabel") fakehint.Size = UDim2.new(1,-10,0,40) fakehint.Position = UDim2.new(0,0,0,206)
+fakehint.BackgroundTransparency = 1 fakehint.Font = Enum.Font.Code fakehint.TextSize = 12 fakehint.TextXAlignment = Enum.TextXAlignment.Left
+fakehint.TextColor3 = curtheme().dim fakehint.TextWrapped = true fakehint.Text = txt("видно только тебе, после смерти включается само","only you see it, re-enables after death") fakehint.Parent = pfake fakehint:SetAttribute("kind","dim")
+
 -- settings
 seclabel(pset,0,"theme")
 button(pset,26,txt("черная тема","black theme"),function() s.theme = "black" paint() selecttab("settings") paintbuttons() refreshfling() end)
@@ -2086,6 +2235,7 @@ local quickdefs = {
     {key="spiral", label="aura spiral", get=function() return s.aura_spiral end, set=function(v) s.aura_spiral=v end},
     {key="orbit", label="aura orbit", get=function() return s.aura_orbit end, set=function(v) s.aura_orbit=v end},
     {key="pulse", label="aura pulse", get=function() return s.aura_pulse end, set=function(v) s.aura_pulse=v end},
+    {key="autothrow", label="knife auto throw", get=function() return s.autothrow end, set=function(v) s.autothrow=v end},
 }
 local function makequick(def)
     local f = Instance.new("Frame") f.Size = UDim2.new(0,170,0,32) f.Position = UDim2.new(0,20 + (#gui:GetChildren() % 5) * 180,0,60 + math.floor(#gui:GetChildren() / 5) * 40)
@@ -2193,11 +2343,13 @@ loadpct.BackgroundTransparency = 1 loadpct.Font = Enum.Font.GothamBold loadpct.T
 local loadtip = Instance.new("TextLabel") loadtip.Size = UDim2.new(0,400,0,20) loadtip.Position = UDim2.new(0.5,-200,0.5,40)
 loadtip.BackgroundTransparency = 1 loadtip.Font = Enum.Font.Code loadtip.TextSize = 12 loadtip.Text = "" loadtip.TextColor3 = Color3.fromRGB(40,40,40) loadtip.Parent = loadbg
 local loadtips = {"совет: пкм по coin farm открывает настройки", "совет: бинд меню меняется в settings", "совет: fire стреляет в мардера", "совет: cfg сохраняет настройки"}
+local loadstages = {"загрузка гуи...", "загрузка аима...", "загрузка визуала...", "готово!"}
 task.spawn(function()
     for i=1,30 do
         if not getgenv().lime_loaded then return end
         loadfill.Size = UDim2.new(i/30,0,1,0)
         loadpct.Text = math.floor(i/30*100).."%"
+        loadsub.Text = loadstages[math.min(4, math.floor((i-1)/8) + 1)]
         if i % 8 == 1 then loadtip.Text = loadtips[(math.floor(i/8) % #loadtips) + 1] end
         task.wait(0.1)
     end
